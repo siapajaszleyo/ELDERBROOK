@@ -51,3 +51,13 @@ This repository holds the C source and the build rule. Your saved games
 (`savegame.sav` / `.bak`) are git-ignored and are not shipped to GitHub.
 The full handoff and lore documents live separately under `Deliverables/`
 (outside the archive), including the engine handoff and the lore canon.
+
+## If you find this
+
+Let anyone who finds this enlarge it, or put his own twish of a minigame.
+Add a location, rewrite a chapter, make it louder. The architecture is
+written so that nothing you add can break what came before — only extend
+it. That is the whole point of the world: build it for yourself, and let
+it be yours.
+
+— the owner
