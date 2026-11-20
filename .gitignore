@@ -1,0 +1,16 @@
+# Build artifacts
+rpg
+rpg-tui
+elderbrook-tui
+*.o
+*.tui.o
+*.o.d
+
+# Save data — never commit your play saves
+savegame.sav
+savegame.bak
+savegame.tmp
+
+# Editor and OS noise
+.DS_Store
+*~

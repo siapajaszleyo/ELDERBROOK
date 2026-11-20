@@ -1,0 +1,12 @@
+[0;1;32m●[0m tmux-spawn-984a6b2a-b784-4e2e-9bbc-711c46017bf8.scope - tmux child pane 41487 launched by process 41486
+     Loaded: loaded (]8;;file://omarchy/run/user/1000/systemd/transient/tmux-spawn-984a6b2a-b784-4e2e-9bbc-711c46017bf8.scope\/run/user/1000/systemd/transient/tmux-spawn-984a6b2a-b784-4e2e-9bbc-711c46017bf8.scope]8;;\; transient)
+  Transient: yes
+     Active: [0;1;32mactive (running)[0m since Thu 2026-10-22 22:12:04 +08; 12h ago
+ Invocation: 3b2cf1e04e334c50b5b77938716404f6
+      Tasks: 10[0;38:5:245m (limit: 38066)[0m
+     Memory: 78.4M (peak: 172.3M)
+        CPU: 11h 54min 4.436s
+     CGroup: /user.slice/user-1000.slice/user@1000.service/app.slice/app-graphical.slice/tmux-spawn-984a6b2a-b784-4e2e-9bbc-711c46017bf8.scope
+             └─[0;38:5:245m41487 ncspot[0m
+
+Oct 22 22:12:04 omarchy systemd[810]: Started tmux child pane 41487 launched by process 41486.

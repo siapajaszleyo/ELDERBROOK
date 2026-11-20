@@ -1,0 +1,50 @@
+FRONTEND HANDOFF — EPIC RPG MERGE
+Date: 2026-10-22
+
+MERGE RESULT
+The merge combines the gameplay implementation from rpg9.zip with the
+ASCII/TUI presentation layer from /home/jaszman/Projects/rpg-src. Backend
+gameplay and save handling use the ZIP baseline; the recent personal gate
+riddles are retained. The existing BACKEND_HANDOFF.txt rules were followed:
+pure C, display-only calls, append/preserve saved fields, and separate classic
+and TUI builds.
+
+DISPLAY WORK
+- Added ascii.c/ascii.h and tui.c/tui.h.
+- Wired title, town gate, world map, location, combat, victory/defeat, and
+  minigame headers into presentation call sites under RPG_TUI.
+- Kept the ZIP ui.c/ui.h API (uiRule, uiTitle, uiPanelLine), which its combat
+  module requires.
+- The TUI stays in the main terminal buffer so mouse-wheel scrollback remains
+  under terminal control. Mouse input itself is not enabled or parsed.
+- The Makefile builds classic objects separately from *.tui.o objects. `make
+  tui` produces `rpg-tui` and the `elderbrook-tui` symlink; classic objects do
+  not contain TUI-only display calls.
+
+GAMEPLAY AND SAVE CONTRACT
+- The merged source retains the ZIP's 30 quests, factions, knight bonds,
+  endless descent, expedition modifiers, and combat/status systems.
+- Save output is RPGSAVE 7 and the loader still accepts V6 saves. The recent
+  V6 sample loaded in the merged build; its temporary copy was upgraded to V7
+  after the hub autosave. The original sample was not changed.
+- Recent custom riddles for the first three locations were kept. The ZIP's
+  other gameplay systems were retained around them.
+
+BUILD / LAUNCH
+- `make clean && make && make tui` passed with `-std=gnu99 -Wall -Wextra -O2`
+  and no warnings.
+- A forced classic rebuild after the TUI build remained a classic binary.
+- `PATH="$PWD:$PATH" elderbrook-tui 42` launched, loaded the V6 sample, and
+  reached Elderbrook. This was a startup/save-compatibility smoke check, not a
+  full playthrough.
+- The source-only classic command `gcc -Wall -Wextra -o rpg *.c` also passed.
+- Do not pass both `*.c` and matching `*.o` to GCC; that duplicates symbols.
+- From the project directory, run `./elderbrook-tui` (or `./rpg-tui`). For a
+  bare `elderbrook-tui` command, add the project directory to PATH.
+
+FILES MERGED
+All C/header sources from rpg9.zip, the ASCII/TUI modules, the integration
+call sites, and the corrected Makefile. Build outputs and save files should
+not be copied from the recent source tree.
+
+END

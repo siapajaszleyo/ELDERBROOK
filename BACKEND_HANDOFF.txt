@@ -1,0 +1,251 @@
+# Backend Engineer Handoff — Epic RPG Adventure (Expanded Edition)
+
+**Language:** C only (ISO C99 / gnu99).  
+**Build:** `make` → `./rpg` · `make tui` → `./rpg-tui` (ASCII/TUI launch for foot).  
+**Do not break saves:** format is `RPGSAVE 6` (see `save.c`). Bump to V7 only if you add new persisted fields via the `buildFields` table.
+
+---
+
+## 1. What exists today (orientation)
+
+| Area | Key files | Notes |
+|------|-----------|--------|
+| Entry / flow | `rpg.c`, `hub.c`, `world.c` | Town loop → world map → expedition plan → events → miniboss |
+| Combat | `combat.c`, `weapons.c`, `class.c` | Movesets, class abilities, DoTs, relics |
+| Progression | `player.c`, `path.c`, `skills.c`, `balance.h` | Level, Path stages, skill tree |
+| Content | `world.c`, `monster.c`, `events.c`, `secrets.c`, `quest.c` | 15 locations, pools, secrets, optional bosses |
+| Minigames | `chess`, `snake`, `dice`, `blackjack`, `memory`, `reflex`, `archery`, `lockpick`, `fishing` | All return `MINI_WIN` / `MINI_LOSE` / `MINI_QUIT` |
+| Meta | `guild.c`, `finale.c`, `endings.c`, `achievements.c` | Factions, finale muster, endings |
+| Persist | `save.c` / `save.h` | Field table driven; extend carefully |
+| Display (new) | `ascii.c`/`ascii.h`, `tui.c`/`tui.h` | Art + terminal shell; **display only** |
+
+**Invariant for new *game* features:**  
+1. Add declarations / types / constants to a **new or existing `.h`**.  
+2. Implement in a **matching `.c`**.  
+3. Wire into planners / menus with **minimal** edits to existing files (one call site preferred).  
+4. Prefer new `EV_*` event types **appended** to the `EventType` enum in `game.h` (never reorder).  
+5. Prefer new minigame kinds **appended** to `MinigameKind` in `game.h`.
+
+Display / ASCII / TUI may touch presentation paths; game logic must stay in pure C modules as above.
+
+---
+
+## 2. How to add a new minigame (canonical pattern)
+
+Follow the shape of `snake` / `dice` / `archery`.
+
+### Step A — Header (`myminigame.h`)
+
+```c
+#ifndef MYMINIGAME_H
+#define MYMINIGAME_H
+
+/* Returns MINI_WIN, MINI_LOSE, or MINI_QUIT (see game.h). */
+int playMyMinigame(int dungeonLevel, const char *bossName);
+
+#endif
+```
+
+### Step B — Implementation (`myminigame.c`)
+
+- `#include "myminigame.h"`, `"input.h"`, `"game.h"`, optionally `"adventure.h"` for stats.
+- Use `readLine` / `readInt` / `readOptional` only (never raw `scanf` for player input).
+- On win, the **caller** grants gold/XP; the minigame itself should only return the result code.
+- Optional: increment `adv.stats[ST_*]` if you add a new counter (see §4).
+
+### Step C — Register the kind
+
+In `game.h`, **append** to the enum (do not reorder):
+
+```c
+typedef enum {
+    MG_CHESS = 0, MG_SNAKE, MG_DICE,
+    MG_BLACKJACK, MG_MEMORY, MG_REFLEX, MG_ARCHERY, MG_LOCKPICK,
+    MG_MYMINIGAME,   /* NEW — always at the end before MG_COUNT */
+    MG_COUNT
+} MinigameKind;
+```
+
+### Step D — Dispatch
+
+In `events.c` → `playMinigame()`:
+
+```c
+case MG_MYMINIGAME: return playMyMinigame(level, name);
+```
+
+Add a human-readable string in the `games[]` array in `minibossEncounter()`.
+
+### Step E — Assign to a location
+
+In `world.c` location table, set `minibossKind` to `MG_MYMINIGAME` for the dungeon that should use it (or leave existing and only use it from practice / new content).
+
+### Step F — Practice table (optional)
+
+In `hub.c` → `practice()`, add a menu entry that calls `playMyMinigame(1, "The trainer")`.
+
+### Step G — Stats / achievements (optional)
+
+1. Append a counter in `adventure.h` `ST_*` enum **only if** `STAT_COUNT` increases — then bump save validation ranges in `save.c` `buildFields` (`stats` field `count`).
+2. Add achievement row in `achievements.c` table + `earned()` case; raise `ACH_COUNT` in `game.h` and extend `achieved[]` save field.
+
+### Step H — Build
+
+Sources are picked up by `Makefile` via `*.c`. No extra link flags unless you pull a library (prefer pure C, no new deps).
+
+---
+
+## 3. Suggested minigames to implement next
+
+Priority order (design + wiring effort vs player value):
+
+| # | Name | Sketch | Hooks |
+|---|------|--------|--------|
+| 1 | **Card Match** (Memory+) | 4×4 face-down pairs; flip two per turn; fewer moves = better rank | `MG_*`, practice, optional secret puzzle |
+| 2 | **Higher/Lower** | Deck; guess next card higher/lower; streak for gold | Tavern gambling tables next to blackjack |
+| 3 | **Word Rune** | Scrambled location-themed word; timed guesses | Secret rooms (`secrets.c` new `PZ_*`) |
+| 4 | **Tower Defense Lite** | Place 3 towers on a 1-lane path; 5 waves of “tokens” | Mid-game unique miniboss |
+| 5 | **Smithing Rhythm** | Sequence of `H`/`T`/`Q` (hammer/turn/quench); timing via `util.pauseMs` + input | Brokk quest / forge mini |
+| 6 | **Stealth Grid** | 8×8; guards with vision cones; reach exit without LOS | Rogue guild trial |
+| 7 | **Potion Brew** | Combine 3 reagents in order; recipe book unlocks | Seraphine / alchemy |
+| 8 | **Naval Boarding** | Simplified 1v1 ship HP + boarding minigame | Pirate location / opt boss |
+
+For each: create `name.h` + `name.c` first; then one-line dispatch; then content assignment.
+
+**Minigame API contract:**
+
+```text
+int playX(int level, const char *opponentName);
+  → MINI_WIN (1) | MINI_LOSE (0) | MINI_QUIT (3)
+```
+
+Chess is the exception (`CHESS_*` codes); map them at the call site if you mirror that style.
+
+---
+
+## 4. Enlarging systems without breaking saves
+
+### 4.1 New event types
+
+Append to `EventType` in `game.h`:
+
+```c
+EV_MY_EVENT,   /* description */
+EV_COUNT
+```
+
+- Add bit to `EVENTS_READY` in `events.h`.
+- Implement `myEventHandler(int dungeonLevel)` in `events.c` (or new `myevent.c` + declare in `events.h`).
+- Call from `runEvent()` switch.
+- Bias into plans in `world.c` → `buildPlanFor()` or location `extras[]`.
+
+### 4.2 New monsters
+
+1. Append `MT_*` in `monster.h`.
+2. Add row to `monsterTypes[]` in `monster.c`.
+3. Add to a location’s `pool[]` in `world.c`.
+
+### 4.3 New items / recipes
+
+Append to `items[]` in `items.c` (never reorder existing indices). Raise `ITEM_COUNT` in `game.h`. Crafting visibility uses `minCleared` / `reqFlag` / `reqBoss`.
+
+### 4.4 New quests
+
+Append row to `quests[]` in `quest.c`; raise `QUEST_COUNT` in `game.h`. Save already stores arrays sized by `QUEST_COUNT`.
+
+### 4.5 New save fields
+
+Only if necessary:
+
+1. Add members to `Player` / `Adventure` / `Progress` as appropriate.
+2. One `ADD("key", ptr, count, min, max)` line in `save.c` → `buildFields`.
+3. Raise `MAX_FIELDS` if needed.
+4. Change header to `RPGSAVE 7` and accept V6 on load (defaults for missing keys already work).
+
+### 4.6 Balance
+
+All combat/economy knobs live in **`balance.h`**. Prefer tuning there over hardcoding in `.c` files.
+
+---
+
+## 5. TUI / ASCII layer (already landed)
+
+| File | Role |
+|------|------|
+| `ascii.h` / `ascii.c` | Title screen, banners, combat/location vignettes, bars |
+| `tui.h` / `tui.c` | Init (UTF-8, alt screen), status strip, colour helpers |
+| `Makefile` | `make tui` builds `rpg-tui` with `-DRPG_TUI` |
+
+**Further display work (allowed to touch presentation):**
+
+- Call `asciiCombatHeader()` from `startCombat()` when `RPG_TUI` is defined.
+- Call `asciiLocationArt(level)` from `enterLocation()` / hub travel.
+- Call minigame headers from each `play*()` entry.
+- Optional: richer ncurses windows later — keep behind `RPG_TUI` and do **not** require ncurses for the classic `./rpg` target.
+
+**foot terminal:** `rpg-tui` enables alt-screen buffer and assumes a UTF-8 locale; hearts/gems come from `ui.h`.
+
+---
+
+## 6. Architecture rules (non-negotiable)
+
+1. **Pure C** — no C++, no Python game logic, no shell scripts as gameplay.
+2. **Headers first** for new features — public API in `.h`, body in `.c`.
+3. **Enum append only** for `EventType`, `MinigameKind`, `Material`, item IDs, `ST_*`, `FLAG_*`, achievements.
+4. **Input** only via `input.c` helpers.
+5. **Random** via existing `rand()` after `srand` in `main`.
+6. **No network** in core loop unless explicitly requested later.
+7. **Guild / finale / path** already implemented — extend; don’t fork parallel systems.
+8. When unsure, add a **transient** system (like `dungeonmod`) that is **not** saved rather than risking save breakage.
+
+---
+
+## 7. Build & test checklist for every PR
+
+```bash
+make clean && make          # classic
+make tui                    # TUI binary
+./rpg 42                    # fixed seed for repro
+./rpg-tui 42
+# Load savegame.sav, enter dungeon 1, fight, quit at checkpoint, reload
+# Run one new minigame from Training → Practice
+```
+
+Compile flags: `-Wall -Wextra`. Treat warnings as bugs for new code.
+
+---
+
+## 8. Recommended first sprint (backend)
+
+1. **Card Match** minigame (`.h` + `.c`, dispatch, practice menu).  
+2. One new `EV_*` exploration room that uses it (or a secret puzzle type).  
+3. One achievement + one `ST_*` counter for wins.  
+4. Wire `ascii*` headers into combat + two minigames under `#ifdef RPG_TUI`.  
+5. Document any new `balance.h` knobs.
+
+---
+
+## 9. File map for “where do I put X?”
+
+| Want to… | Put it in… |
+|----------|------------|
+| New minigame | `name.h` + `name.c`; dispatch in `events.c`; kind in `game.h` |
+| New dungeon event | `events.c` / new module; enum + `EVENTS_READY`; planner in `world.c` |
+| New monster | `monster.h` / `monster.c` / location pool |
+| New equipment | end of `items.c` table; `ITEM_COUNT` |
+| New quest | end of `quests[]` in `quest.c`; `QUEST_COUNT` |
+| New guild perk text | tables in `guild.c` |
+| Tuning numbers | `balance.h` only |
+| Save field | `buildFields` in `save.c` + struct in `adventure.h` / `player.h` |
+| ASCII / frames | `ascii.c` / `tui.c` |
+| Town menu entry | `hub.c` |
+
+---
+
+## 10. Contact assumptions
+
+- Player save sample: `savegame.sav` (RPGSAVE 6, class Rogue / Assassin-style fields present).  
+- Original binary build: `gcc -Wall -Wextra -o rpg *.c`.  
+- This tree also builds `rpg-tui` via Makefile.
+
+**End of handoff.** Implement features as new `.h` then `.c`, append enums, keep combat/save contracts stable, and prefer content depth (minigames, events, quests) over refactors of working systems.
